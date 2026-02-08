@@ -20,6 +20,11 @@ npm install
 cp .env.example .env
 ```
 
+If you use Neon pooler for runtime, set:
+- `DATABASE_URL` to the `-pooler` endpoint
+- `DIRECT_URL` to the non-pooler endpoint
+This ensures Prisma migration commands can connect directly.
+
 3. Run Prisma:
 
 ```bash
