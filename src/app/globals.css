@@ -1,0 +1,17 @@
+@import url("https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-booth-900 text-booth-50 font-body;
+}
+
+* {
+  box-sizing: border-box;
+}
