@@ -1,5 +1,6 @@
 import Busboy from "busboy";
 import { Readable } from "node:stream";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
 export type ParsedFile = {
   buffer: Buffer;
@@ -76,6 +77,6 @@ export const parseMultipart = async (
       resolve({ fields, file: fileData });
     });
 
-    Readable.fromWeb(req.body as ReadableStream).pipe(bb);
+    Readable.fromWeb(req.body as NodeReadableStream).pipe(bb);
   });
 };
