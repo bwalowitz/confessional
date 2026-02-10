@@ -69,7 +69,7 @@ npm test
 
 ## Admin Panel
 - Set `ADMIN_PASSWORD` in `.env`.
-- Set `ADMIN_SESSION_SECRET` in `.env` for signed HTTP-only admin sessions.
+- Set `ADMIN_SESSION_SECRET` in `.env` (32+ chars) for signed HTTP-only admin sessions.
 - Visit `/admin`, sign in, then list/delete uploads.
 
 ## Abuse Controls

@@ -18,6 +18,7 @@ const sign = (payload: string) =>
 
 export const isAdminPasswordValid = (password: string) => {
   if (!env.adminPassword) return false;
+  if (!env.adminSessionSecret || env.adminSessionSecret.length < 32) return false;
   return compareSecrets(password, env.adminPassword);
 };
 
