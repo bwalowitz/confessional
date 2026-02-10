@@ -31,4 +31,5 @@ model Report {
 
   @@index([videoPostId])
   @@index([ipHash])
+  @@unique([videoPostId, ipHash])
 }

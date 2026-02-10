@@ -53,7 +53,9 @@ npm run dev
 - If no supported `MediaRecorder` mime type is found (older Safari), the UI surfaces an error.
 
 ## Rate Limiting & Size Limits
-- Uploads are limited per IP in-memory (best-effort for serverless).
+- Uploads and reports are limited per IP.
+- Durable mode: set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`.
+- Fallback mode: in-memory limiter (dev or when Redis env vars are missing).
 - `MAX_UPLOAD_BYTES`, `RATE_LIMIT_MAX`, and `RATE_LIMIT_WINDOW_SECONDS` control caps.
 
 ## Storage
@@ -67,7 +69,12 @@ npm test
 
 ## Admin Panel
 - Set `ADMIN_PASSWORD` in `.env`.
-- Visit `/admin` and enter the password to list and delete uploads.
+- Set `ADMIN_SESSION_SECRET` in `.env` for signed HTTP-only admin sessions.
+- Visit `/admin`, sign in, then list/delete uploads.
+
+## Abuse Controls
+- Duplicate reports from the same `ipHash` for a post are deduplicated.
+- Uploaded files are validated by declared MIME and container signature (`webm`/`mp4`) before storage.
 
 ## Deployment Notes (Vercel)
 - Provision Postgres (Neon/Supabase/etc) and set `DATABASE_URL`.

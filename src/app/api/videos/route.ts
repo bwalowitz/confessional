@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  const rate = checkRateLimit(ip, env.rateLimitMax, env.rateLimitWindowSeconds * 1000);
+  const rate = await checkRateLimit(`upload:${ip}`, env.rateLimitMax, env.rateLimitWindowSeconds * 1000);
 
   if (!rate.ok) {
     return NextResponse.json(
@@ -64,26 +64,27 @@ export async function POST(req: NextRequest) {
   const width = Number(parsed.fields.width ?? "0");
   const height = Number(parsed.fields.height ?? "0");
 
+  const declaredMimeType = parsed.file.mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
   const validation = validateUpload({
-    mimeType: parsed.file.mimeType,
+    declaredMimeType,
+    fileBuffer: parsed.file.buffer,
     sizeBytes: parsed.file.size,
     maxBytes: env.maxUploadBytes,
-    durationSeconds
+    durationSeconds,
+    width: Math.round(width),
+    height: Math.round(height)
   });
 
   if (!validation.ok) {
     return NextResponse.json({ error: validation.reason }, { status: 400 });
   }
 
-  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
-    return NextResponse.json({ error: "invalid_dimensions" }, { status: 400 });
-  }
-
-  const key = `videos/${randomUUID()}.${extensionForMime(parsed.file.mimeType)}`;
+  const normalizedMimeType = validation.normalizedMimeType;
+  const key = `videos/${randomUUID()}.${extensionForMime(normalizedMimeType)}`;
   const videoUrl = await uploadObject({
     key,
     body: parsed.file.buffer,
-    contentType: parsed.file.mimeType
+    contentType: normalizedMimeType
   });
 
   const record = await prisma.videoPost.create({
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
       durationSeconds: Math.round(durationSeconds),
       width: Math.round(width),
       height: Math.round(height),
-      mimeType: parsed.file.mimeType
+      mimeType: normalizedMimeType
     }
   });
 

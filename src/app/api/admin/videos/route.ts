@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/db";
-import { env } from "@/lib/env";
 import { deleteObject } from "@/server/s3";
+import { ADMIN_COOKIE_NAME, verifyAdminSessionToken } from "@/server/admin-auth";
 
 export const runtime = "nodejs";
 
 const requireAdmin = (req: NextRequest) => {
-  const token = req.headers.get("x-admin-token") ?? "";
-  if (!env.adminPassword || token !== env.adminPassword) {
+  const token = req.cookies.get(ADMIN_COOKIE_NAME)?.value;
+  if (!token || !verifyAdminSessionToken(token)) {
     return false;
   }
   return true;
@@ -18,8 +18,9 @@ const keyFromPublicUrl = (rawUrl: string) => {
     const parsed = new URL(rawUrl);
     let key = parsed.pathname.replace(/^\/+/, "");
     if (!key) return null;
-    if (key.startsWith(`${env.s3Bucket}/`)) {
-      key = key.slice(env.s3Bucket.length + 1);
+    const bucketName = process.env.S3_BUCKET ?? "";
+    if (bucketName && key.startsWith(`${bucketName}/`)) {
+      key = key.slice(bucketName.length + 1);
     }
     return key || null;
   } catch {

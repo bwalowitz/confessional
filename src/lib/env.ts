@@ -18,7 +18,10 @@ export const env = {
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? "15000000"),
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX ?? "8"),
   rateLimitWindowSeconds: Number(process.env.RATE_LIMIT_WINDOW_SECONDS ?? "300"),
+  upstashRedisRestUrl: process.env.UPSTASH_REDIS_REST_URL ?? "",
+  upstashRedisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN ?? "",
   ipHashSalt: readEnv("IP_HASH_SALT", ""),
   appBaseUrl: process.env.NEXT_PUBLIC_BASE_URL ?? "",
-  adminPassword: process.env.ADMIN_PASSWORD ?? ""
+  adminPassword: process.env.ADMIN_PASSWORD ?? "",
+  adminSessionSecret: process.env.ADMIN_SESSION_SECRET ?? process.env.ADMIN_PASSWORD ?? ""
 };
