@@ -5,8 +5,6 @@ import type { VideoPost } from "@/components/ConfessionalApp";
 
 const MAX_DURATION = 30;
 
-type VoicePreset = "masked" | "deep" | "robot" | "none";
-
 const pickMimeType = () => {
   const options = [
     "video/webm;codecs=vp9",
@@ -59,14 +57,12 @@ export default function RecorderModal({
   const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const audioDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const audioNodesRef = useRef<AudioNode[]>([]);
-  const audioLfoRef = useRef<OscillatorNode | null>(null);
   const pixelSizeRef = useRef<number>(24);
   const chunksRef = useRef<Blob[]>([]);
   const recordStartRef = useRef<number | null>(null);
 
   const [pixelSize, setPixelSize] = useState(24);
-  const [voicePreset, setVoicePreset] = useState<VoicePreset>("masked");
-  const [voiceMix, setVoiceMix] = useState(80);
+  const [voiceMix, setVoiceMix] = useState(72);
   const [recording, setRecording] = useState(false);
   const [readyBlob, setReadyBlob] = useState<Blob | null>(null);
   const [countdown, setCountdown] = useState(MAX_DURATION);
@@ -76,10 +72,6 @@ export default function RecorderModal({
   const [mimeType, setMimeType] = useState<string>("");
 
   const clearAudioGraph = () => {
-    audioLfoRef.current?.stop();
-    audioLfoRef.current?.disconnect();
-    audioLfoRef.current = null;
-
     audioNodesRef.current.forEach((node) => {
       try {
         node.disconnect();
@@ -107,11 +99,6 @@ export default function RecorderModal({
 
     clearAudioGraph();
 
-    if (voicePreset === "none") {
-      source.connect(destination);
-      return;
-    }
-
     const dryGain = ctx.createGain();
     const wetGain = ctx.createGain();
     dryGain.gain.value = Math.max(0, 1 - voiceMix / 100);
@@ -120,80 +107,38 @@ export default function RecorderModal({
     source.connect(dryGain);
     dryGain.connect(destination);
 
-    if (voicePreset === "masked") {
-      const highpass = ctx.createBiquadFilter();
-      highpass.type = "highpass";
-      highpass.frequency.value = 220;
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = "highpass";
+    highpass.frequency.value = 180;
 
-      const lowpass = ctx.createBiquadFilter();
-      lowpass.type = "lowpass";
-      lowpass.frequency.value = 2800;
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = "bandpass";
+    bandpass.frequency.value = 980;
+    bandpass.Q.value = 0.9;
 
-      const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = -30;
-      compressor.ratio.value = 8;
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = "lowpass";
+    lowpass.frequency.value = 2600;
 
-      source.connect(highpass);
-      highpass.connect(lowpass);
-      lowpass.connect(compressor);
-      compressor.connect(wetGain);
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -26;
+    compressor.knee.value = 18;
+    compressor.ratio.value = 7;
+    compressor.attack.value = 0.004;
+    compressor.release.value = 0.18;
 
-      audioNodesRef.current = [dryGain, wetGain, highpass, lowpass, compressor];
-    }
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = createDistortionCurve(38);
+    shaper.oversample = "2x";
 
-    if (voicePreset === "deep") {
-      const lowshelf = ctx.createBiquadFilter();
-      lowshelf.type = "lowshelf";
-      lowshelf.frequency.value = 200;
-      lowshelf.gain.value = 14;
+    source.connect(highpass);
+    highpass.connect(bandpass);
+    bandpass.connect(lowpass);
+    lowpass.connect(compressor);
+    compressor.connect(shaper);
+    shaper.connect(wetGain);
 
-      const lowpass = ctx.createBiquadFilter();
-      lowpass.type = "lowpass";
-      lowpass.frequency.value = 1800;
-
-      const shaper = ctx.createWaveShaper();
-      shaper.curve = createDistortionCurve(80);
-      shaper.oversample = "2x";
-
-      source.connect(lowshelf);
-      lowshelf.connect(lowpass);
-      lowpass.connect(shaper);
-      shaper.connect(wetGain);
-
-      audioNodesRef.current = [dryGain, wetGain, lowshelf, lowpass, shaper];
-    }
-
-    if (voicePreset === "robot") {
-      const bandpass = ctx.createBiquadFilter();
-      bandpass.type = "bandpass";
-      bandpass.frequency.value = 780;
-      bandpass.Q.value = 1.1;
-
-      const tremolo = ctx.createGain();
-      tremolo.gain.value = 0.65;
-
-      const lfo = ctx.createOscillator();
-      lfo.type = "square";
-      lfo.frequency.value = 45;
-
-      const lfoDepth = ctx.createGain();
-      lfoDepth.gain.value = 0.35;
-      lfo.connect(lfoDepth);
-      lfoDepth.connect(tremolo.gain);
-      lfo.start();
-      audioLfoRef.current = lfo;
-
-      const shaper = ctx.createWaveShaper();
-      shaper.curve = createDistortionCurve(120);
-      shaper.oversample = "2x";
-
-      source.connect(bandpass);
-      bandpass.connect(tremolo);
-      tremolo.connect(shaper);
-      shaper.connect(wetGain);
-
-      audioNodesRef.current = [dryGain, wetGain, bandpass, tremolo, lfoDepth, lfo, shaper];
-    }
+    audioNodesRef.current = [dryGain, wetGain, highpass, bandpass, lowpass, compressor, shaper];
 
     wetGain.connect(destination);
   };
@@ -230,7 +175,7 @@ export default function RecorderModal({
 
   useEffect(() => {
     rebuildAudioGraph();
-  }, [voicePreset, voiceMix]);
+  }, [voiceMix]);
 
   useEffect(() => {
     if (!open) {
@@ -516,29 +461,16 @@ export default function RecorderModal({
 
             <div>
               <label className="text-xs uppercase tracking-[0.3em] text-booth-300">Voice Disguise</label>
-              <select
-                value={voicePreset}
-                onChange={(event) => setVoicePreset(event.target.value as VoicePreset)}
-                className="mt-2 w-full rounded-lg border border-booth-700 bg-booth-900 px-3 py-2 text-sm text-booth-100"
-                disabled={recording}
-              >
-                <option value="masked">Masked (Recommended)</option>
-                <option value="deep">Deep</option>
-                <option value="robot">Robot</option>
-                <option value="none">None</option>
-              </select>
-
-              <label className="mt-3 block text-xs uppercase tracking-[0.3em] text-booth-300">Disguise Mix</label>
               <input
                 type="range"
-                min={0}
-                max={100}
+                min={45}
+                max={95}
                 value={voiceMix}
                 onChange={(event) => setVoiceMix(Number(event.target.value))}
                 className="mt-2 w-full accent-ember-300"
-                disabled={recording || voicePreset === "none"}
+                disabled={recording}
               />
-              <div className="mt-1 text-xs text-booth-400">Effect blend: {voicePreset === "none" ? 0 : voiceMix}%</div>
+              <div className="mt-1 text-xs text-booth-400">Disguise strength: {voiceMix}%</div>
             </div>
 
             <div className="rounded-xl border border-booth-700/70 bg-booth-800/50 px-4 py-3 text-xs text-booth-300">
