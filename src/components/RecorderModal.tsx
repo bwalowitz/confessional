@@ -48,7 +48,7 @@ export default function RecorderModal({
   const recordStartRef = useRef<number | null>(null);
 
   const [pixelSize, setPixelSize] = useState(24);
-  const [voiceMix, setVoiceMix] = useState(68);
+  const [voiceMix, setVoiceMix] = useState(82);
   const [recording, setRecording] = useState(false);
   const [readyBlob, setReadyBlob] = useState<Blob | null>(null);
   const [countdown, setCountdown] = useState(MAX_DURATION);
@@ -87,47 +87,100 @@ export default function RecorderModal({
 
     const dryGain = ctx.createGain();
     const wetGain = ctx.createGain();
-    dryGain.gain.value = Math.max(0, 1 - voiceMix / 100);
-    wetGain.gain.value = Math.min(1, voiceMix / 100);
+    const normalizedStrength = Math.min(1, Math.max(0, voiceMix / 100));
+    dryGain.gain.value = Math.max(0.02, 0.22 - normalizedStrength * 0.2);
+    wetGain.gain.value = Math.min(1, 0.78 + normalizedStrength * 0.22);
 
     source.connect(dryGain);
     dryGain.connect(destination);
 
-    const highpass = ctx.createBiquadFilter();
-    highpass.type = "highpass";
-    highpass.frequency.value = 120;
+    const deepHighpass = ctx.createBiquadFilter();
+    deepHighpass.type = "highpass";
+    deepHighpass.frequency.value = 90;
 
-    const lowshelf = ctx.createBiquadFilter();
-    lowshelf.type = "lowshelf";
-    lowshelf.frequency.value = 210;
-    lowshelf.gain.value = 7;
+    const deepLowshelf = ctx.createBiquadFilter();
+    deepLowshelf.type = "lowshelf";
+    deepLowshelf.frequency.value = 180;
+    deepLowshelf.gain.value = 10;
 
-    const peaking = ctx.createBiquadFilter();
-    peaking.type = "peaking";
-    peaking.frequency.value = 700;
-    peaking.Q.value = 0.8;
-    peaking.gain.value = 4;
+    const deepPeaking = ctx.createBiquadFilter();
+    deepPeaking.type = "peaking";
+    deepPeaking.frequency.value = 520;
+    deepPeaking.Q.value = 0.7;
+    deepPeaking.gain.value = 6;
 
-    const highshelf = ctx.createBiquadFilter();
-    highshelf.type = "highshelf";
-    highshelf.frequency.value = 2600;
-    highshelf.gain.value = -10;
+    const deepLowpass = ctx.createBiquadFilter();
+    deepLowpass.type = "lowpass";
+    deepLowpass.frequency.value = 1900;
 
-    const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.value = -24;
-    compressor.knee.value = 12;
-    compressor.ratio.value = 5;
-    compressor.attack.value = 0.006;
-    compressor.release.value = 0.2;
+    const deepCompressor = ctx.createDynamicsCompressor();
+    deepCompressor.threshold.value = -24;
+    deepCompressor.knee.value = 10;
+    deepCompressor.ratio.value = 6;
+    deepCompressor.attack.value = 0.004;
+    deepCompressor.release.value = 0.22;
 
-    source.connect(highpass);
-    highpass.connect(lowshelf);
-    lowshelf.connect(peaking);
-    peaking.connect(highshelf);
-    highshelf.connect(compressor);
-    compressor.connect(wetGain);
+    const deepGain = ctx.createGain();
+    deepGain.gain.value = 0.75;
 
-    audioNodesRef.current = [dryGain, wetGain, highpass, lowshelf, peaking, highshelf, compressor];
+    const octaveInputHighpass = ctx.createBiquadFilter();
+    octaveInputHighpass.type = "highpass";
+    octaveInputHighpass.frequency.value = 380;
+
+    // Full-wave rectify to synthesize an octave-up component.
+    const octaveShaper = ctx.createWaveShaper();
+    const curve = new Float32Array(2048);
+    for (let i = 0; i < curve.length; i += 1) {
+      const x = (i / (curve.length - 1)) * 2 - 1;
+      curve[i] = Math.abs(x);
+    }
+    octaveShaper.curve = curve;
+    octaveShaper.oversample = "4x";
+
+    const octaveBandpass = ctx.createBiquadFilter();
+    octaveBandpass.type = "bandpass";
+    octaveBandpass.frequency.value = 1400;
+    octaveBandpass.Q.value = 0.8;
+
+    const octaveCompressor = ctx.createDynamicsCompressor();
+    octaveCompressor.threshold.value = -34;
+    octaveCompressor.ratio.value = 5;
+    octaveCompressor.attack.value = 0.003;
+    octaveCompressor.release.value = 0.16;
+
+    const octaveGain = ctx.createGain();
+    octaveGain.gain.value = 0.25 + normalizedStrength * 0.2;
+
+    source.connect(deepHighpass);
+    deepHighpass.connect(deepLowshelf);
+    deepLowshelf.connect(deepPeaking);
+    deepPeaking.connect(deepLowpass);
+    deepLowpass.connect(deepCompressor);
+    deepCompressor.connect(deepGain);
+    deepGain.connect(wetGain);
+
+    source.connect(octaveInputHighpass);
+    octaveInputHighpass.connect(octaveShaper);
+    octaveShaper.connect(octaveBandpass);
+    octaveBandpass.connect(octaveCompressor);
+    octaveCompressor.connect(octaveGain);
+    octaveGain.connect(wetGain);
+
+    audioNodesRef.current = [
+      dryGain,
+      wetGain,
+      deepHighpass,
+      deepLowshelf,
+      deepPeaking,
+      deepLowpass,
+      deepCompressor,
+      deepGain,
+      octaveInputHighpass,
+      octaveShaper,
+      octaveBandpass,
+      octaveCompressor,
+      octaveGain
+    ];
 
     wetGain.connect(destination);
   };
@@ -452,14 +505,14 @@ export default function RecorderModal({
               <label className="text-xs uppercase tracking-[0.3em] text-booth-300">Voice Disguise</label>
               <input
                 type="range"
-                min={45}
-                max={95}
+                min={60}
+                max={100}
                 value={voiceMix}
                 onChange={(event) => setVoiceMix(Number(event.target.value))}
                 className="mt-2 w-full accent-ember-300"
                 disabled={recording}
               />
-              <div className="mt-1 text-xs text-booth-400">Lower-tone strength: {voiceMix}%</div>
+              <div className="mt-1 text-xs text-booth-400">Disguise intensity: {voiceMix}%</div>
             </div>
 
             <div className="rounded-xl border border-booth-700/70 bg-booth-800/50 px-4 py-3 text-xs text-booth-300">
