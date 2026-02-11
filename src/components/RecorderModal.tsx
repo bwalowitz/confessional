@@ -22,20 +22,6 @@ const pickMimeType = () => {
   return "";
 };
 
-const createDistortionCurve = (amount: number) => {
-  const samples = 44100;
-  const curve = new Float32Array(samples);
-  const k = Math.max(1, amount);
-  const deg = Math.PI / 180;
-
-  for (let i = 0; i < samples; i += 1) {
-    const x = (i * 2) / samples - 1;
-    curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
-  }
-
-  return curve;
-};
-
 export default function RecorderModal({
   open,
   onClose,
@@ -62,7 +48,7 @@ export default function RecorderModal({
   const recordStartRef = useRef<number | null>(null);
 
   const [pixelSize, setPixelSize] = useState(24);
-  const [voiceMix, setVoiceMix] = useState(72);
+  const [voiceMix, setVoiceMix] = useState(68);
   const [recording, setRecording] = useState(false);
   const [readyBlob, setReadyBlob] = useState<Blob | null>(null);
   const [countdown, setCountdown] = useState(MAX_DURATION);
@@ -109,36 +95,39 @@ export default function RecorderModal({
 
     const highpass = ctx.createBiquadFilter();
     highpass.type = "highpass";
-    highpass.frequency.value = 180;
+    highpass.frequency.value = 120;
 
-    const bandpass = ctx.createBiquadFilter();
-    bandpass.type = "bandpass";
-    bandpass.frequency.value = 980;
-    bandpass.Q.value = 0.9;
+    const lowshelf = ctx.createBiquadFilter();
+    lowshelf.type = "lowshelf";
+    lowshelf.frequency.value = 210;
+    lowshelf.gain.value = 7;
 
-    const lowpass = ctx.createBiquadFilter();
-    lowpass.type = "lowpass";
-    lowpass.frequency.value = 2600;
+    const peaking = ctx.createBiquadFilter();
+    peaking.type = "peaking";
+    peaking.frequency.value = 700;
+    peaking.Q.value = 0.8;
+    peaking.gain.value = 4;
+
+    const highshelf = ctx.createBiquadFilter();
+    highshelf.type = "highshelf";
+    highshelf.frequency.value = 2600;
+    highshelf.gain.value = -10;
 
     const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.value = -26;
-    compressor.knee.value = 18;
-    compressor.ratio.value = 7;
-    compressor.attack.value = 0.004;
-    compressor.release.value = 0.18;
-
-    const shaper = ctx.createWaveShaper();
-    shaper.curve = createDistortionCurve(38);
-    shaper.oversample = "2x";
+    compressor.threshold.value = -24;
+    compressor.knee.value = 12;
+    compressor.ratio.value = 5;
+    compressor.attack.value = 0.006;
+    compressor.release.value = 0.2;
 
     source.connect(highpass);
-    highpass.connect(bandpass);
-    bandpass.connect(lowpass);
-    lowpass.connect(compressor);
-    compressor.connect(shaper);
-    shaper.connect(wetGain);
+    highpass.connect(lowshelf);
+    lowshelf.connect(peaking);
+    peaking.connect(highshelf);
+    highshelf.connect(compressor);
+    compressor.connect(wetGain);
 
-    audioNodesRef.current = [dryGain, wetGain, highpass, bandpass, lowpass, compressor, shaper];
+    audioNodesRef.current = [dryGain, wetGain, highpass, lowshelf, peaking, highshelf, compressor];
 
     wetGain.connect(destination);
   };
@@ -470,7 +459,7 @@ export default function RecorderModal({
                 className="mt-2 w-full accent-ember-300"
                 disabled={recording}
               />
-              <div className="mt-1 text-xs text-booth-400">Disguise strength: {voiceMix}%</div>
+              <div className="mt-1 text-xs text-booth-400">Lower-tone strength: {voiceMix}%</div>
             </div>
 
             <div className="rounded-xl border border-booth-700/70 bg-booth-800/50 px-4 py-3 text-xs text-booth-300">
